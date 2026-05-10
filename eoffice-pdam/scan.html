@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Scan Barcode - E-Office PDAM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+  <?!= include('scripts'); ?>
+  <script>
+    window.APP_URL = '<?= webAppUrl ?>';
+    window.EOF_LAYOUT_PAGE = 'scan';
+    window.EOF_LAYOUT_TITLE = 'Scan Barcode';
+  </script>
+  <?!= include('layout'); ?>
+
+  <script>
+    const page = document.getElementById('eof-page');
+    page.innerHTML = `
+      <div class="page-head">
+        <div>
+          <div class="page-title">Scan Barcode</div>
+          <div class="page-sub">Arahkan kamera ke QR code pada surat untuk lacak instan.</div>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 1.2fr 1fr; gap: 16px">
+        <div class="card anim-fade">
+          <div class="card-header">
+            <div class="card-title">Kamera</div>
+            <div class="flex gap-2">
+              <button class="btn btn-ghost btn-sm" id="btn-stop" style="display:none">Hentikan</button>
+              <button class="btn btn-sm" id="btn-start">Mulai Scan</button>
+            </div>
+          </div>
+          <div id="reader" style="border-radius:12px;overflow:hidden;background:#000;min-height:320px"></div>
+          <div class="text-sm text-muted text-center mt-3">Atau ketik manual kode di bawah ini:</div>
+          <div class="flex gap-2 mt-2">
+            <input class="input" id="manual" placeholder="SM-20260510-XXXXXXXX" style="flex:1">
+            <button class="btn" id="btn-manual">Cari</button>
+          </div>
+        </div>
+
+        <div class="card anim-fade" id="result-card">
+          <div class="card-title mb-3">Hasil</div>
+          <div class="empty" style="padding:30px 10px">
+            <div class="empty-ico">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h2v2H7zM15 7h2v2h-2zM7 15h2v2H7z"/></svg>
+            </div>
+            Hasil scan akan muncul di sini.
+          </div>
+        </div>
+      </div>
+    `;
+
+    let qrScanner = null;
+    const btnStart = document.getElementById('btn-start');
+    const btnStop = document.getElementById('btn-stop');
+
+    btnStart.addEventListener('click', startScan);
+    btnStop.addEventListener('click', stopScan);
+    document.getElementById('btn-manual').addEventListener('click', () => {
+      const v = document.getElementById('manual').value.trim();
+      if (v) lookup(v);
+    });
+    document.getElementById('manual').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-manual').click();
+    });
+
+    async function startScan() {
+      try {
+        if (!qrScanner) qrScanner = new Html5Qrcode('reader');
+        const cams = await Html5Qrcode.getCameras();
+        if (!cams || !cams.length) { EOF.toast('Kamera tidak ditemukan', 'error'); return; }
+        const camId = cams.find(c => /back|rear|environment/i.test(c.label))?.id || cams[0].id;
+        await qrScanner.start(camId, { fps: 10, qrbox: { width: 240, height: 240 } }, onDetected);
+        btnStart.style.display = 'none';
+        btnStop.style.display = '';
+      } catch (e) { EOF.toast('Gagal akses kamera: ' + e.message, 'error'); }
+    }
+    async function stopScan() {
+      try { if (qrScanner) { await qrScanner.stop(); qrScanner.clear(); } } catch(_){}
+      btnStart.style.display = '';
+      btnStop.style.display = 'none';
+    }
+    function onDetected(text) {
+      stopScan();
+      EOF.toast('Kode terdeteksi: ' + text, 'info');
+      lookup(text);
+    }
+
+    async function lookup(code) {
+      const el = document.getElementById('result-card');
+      el.innerHTML = '<div class="card-title mb-3">Hasil</div><div class="loader-wrap"><div class="spinner"></div></div>';
+      try {
+        const r = await EOF.api('track.byBarcode', { barcode: code });
+        const s = r.surat;
+        const timeline = await EOF.api('track.timeline', { suratId: s.id });
+        el.innerHTML = `
+          <div class="card-title mb-3">Hasil Scan</div>
+          <div class="flex items-center justify-between mb-2">
+            <div class="fw-700">${EOF.escapeHtml(s.perihal)}</div>
+            ${EOF.statusBadge(s.status)}
+          </div>
+          <div class="text-sm text-muted mb-3">${r.type === 'SuratKeluar' ? 'Surat Keluar · ' + EOF.escapeHtml(s.noSurat) : 'Surat Masuk · ' + EOF.escapeHtml(s.noAgenda)}</div>
+          <button class="btn w-full mb-3" onclick="window.top.location.href=EOF.appUrl('detail',{id:'${s.id}',type:'${r.type==='SuratKeluar'?'sk':'sm'}'})">Buka Detail</button>
+          <div class="card-title mt-3 mb-2">Timeline</div>
+          ${timelineHtml(timeline)}
+        `;
+      } catch (e) {
+        el.innerHTML = '<div class="card-title mb-3">Hasil</div><div class="empty">' + EOF.escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    function timelineHtml(events) {
+      if (!events || !events.length) return '<div class="text-muted text-sm">Belum ada aktivitas.</div>';
+      return '<div class="timeline">' + events.map((e,i) => {
+        const vCls = /selesai|setuju/i.test(e.action) ? 'success' : /tolak|hapus/i.test(e.action) ? 'warning' : '';
+        return '<div class="timeline-item ' + vCls + '" style="animation-delay:'+(i*0.04)+'s">' +
+          '<div class="timeline-dot"></div>' +
+          '<div class="timeline-title">' + EOF.escapeHtml(e.action) + '</div>' +
+          '<div class="timeline-meta">' + EOF.escapeHtml(e.actor||'-') + ' · ' + EOF.fmtDate(e.timestamp, true) + '</div>' +
+          (e.detail ? '<div class="timeline-detail">' + EOF.escapeHtml(e.detail) + '</div>' : '') +
+        '</div>';
+      }).join('') + '</div>';
+    }
+  </script>
+</body>
+</html>

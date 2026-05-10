@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Dashboard - E-Office PDAM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <?!= include('scripts'); ?>
+  <script>
+    window.APP_URL = '<?= webAppUrl ?>';
+    window.EOF_LAYOUT_PAGE = 'dashboard';
+    window.EOF_LAYOUT_TITLE = 'Dashboard';
+  </script>
+  <?!= include('layout'); ?>
+
+  <script>
+    document.getElementById('eof-page').innerHTML = `
+      <div class="page-head">
+        <div>
+          <div class="page-title">Selamat datang kembali 👋</div>
+          <div class="page-sub">Ringkasan aktivitas persuratan E-Office PDAM.</div>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost" onclick="window.top.location.href=EOF.appUrl('surat-masuk',{action:'new'})">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Surat Masuk
+          </button>
+          <button class="btn" onclick="window.top.location.href=EOF.appUrl('surat-keluar',{action:'new'})">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Surat Keluar
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-4 anim-stagger" id="stat-grid">
+        ${skeletonStat()}${skeletonStat()}${skeletonStat()}${skeletonStat()}
+      </div>
+
+      <div class="grid" style="grid-template-columns: 2fr 1fr; margin-top: 18px; gap:16px">
+        <div class="card anim-fade">
+          <div class="card-header">
+            <div class="card-title">Aktivitas Persuratan (6 Bulan Terakhir)</div>
+            <span class="badge primary"><span class="dot"></span>Real-time</span>
+          </div>
+          <div style="height: 280px"><canvas id="chartTrend"></canvas></div>
+        </div>
+        <div class="card anim-fade">
+          <div class="card-header">
+            <div class="card-title">Status Surat Masuk</div>
+          </div>
+          <div style="height: 280px"><canvas id="chartStatus"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="margin-top: 18px">
+        <div class="card anim-fade">
+          <div class="card-header">
+            <div class="card-title">Surat Masuk Terbaru</div>
+            <a href="javascript:void(0)" onclick="window.top.location.href=EOF.appUrl('surat-masuk')" class="text-sm">Lihat semua →</a>
+          </div>
+          <div id="recent-sm">${loader()}</div>
+        </div>
+        <div class="card anim-fade">
+          <div class="card-header">
+            <div class="card-title">Aktivitas Terakhir</div>
+          </div>
+          <div id="recent-track">${loader()}</div>
+        </div>
+      </div>
+    `;
+
+    function skeletonStat() {
+      return '<div class="stat-card"><div class="skeleton" style="width:44px;height:44px;border-radius:12px;margin-bottom:14px"></div><div class="skeleton" style="height:10px;width:70%;margin-bottom:8px"></div><div class="skeleton" style="height:22px;width:40%"></div></div>';
+    }
+    function loader() { return '<div class="loader-wrap"><div class="spinner"></div></div>'; }
+
+    async function renderStats() {
+      try {
+        const s = await EOF.api('dash.stats', {});
+        const grid = document.getElementById('stat-grid');
+        grid.innerHTML = [
+          card('Surat Masuk', s.suratMasukTotal, s.suratMasukBulanIni + ' bulan ini', 'primary', svgMail()),
+          card('Surat Keluar', s.suratKeluarTotal, s.suratKeluarBulanIni + ' bulan ini', 'success', svgSend()),
+          card('Belum Ditindak', s.suratMasukBelumDitindak, 'Menunggu disposisi', 'warning', svgClock()),
+          card('Disposisi Aktif', s.disposisiAktif, s.disposisiSelesai + ' selesai', 'danger', svgFlash())
+        ].join('');
+      } catch (e) { EOF.toast(e.message, 'error'); }
+    }
+    function card(label, val, delta, variant, ico) {
+      return '<div class="stat-card ' + variant + '">' +
+        '<div class="stat-ico">' + ico + '</div>' +
+        '<div class="stat-label">' + label + '</div>' +
+        '<div class="stat-value">' + val + '</div>' +
+        '<div class="stat-delta">' + delta + '</div>' +
+      '</div>';
+    }
+    const svgMail  = () => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><polyline points="4 7 12 13 20 7"/></svg>';
+    const svgSend  = () => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+    const svgClock = () => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+    const svgFlash = () => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+
+    async function renderCharts() {
+      try {
+        const c = await EOF.api('dash.chart', {});
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const gridColor = isDark ? 'rgba(148,163,184,.15)' : 'rgba(15,23,42,.06)';
+        const tickColor = isDark ? '#94a3b8' : '#64748b';
+
+        new Chart(document.getElementById('chartTrend'), {
+          type: 'line',
+          data: {
+            labels: c.labels,
+            datasets: [
+              { label: 'Surat Masuk', data: c.suratMasuk, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.12)', fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#2563eb', borderWidth: 3 },
+              { label: 'Surat Keluar', data: c.suratKeluar, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.12)', fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#10b981', borderWidth: 3 }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { color: tickColor, usePointStyle: true, pointStyle: 'circle', padding: 14 } } },
+            scales: {
+              x: { grid: { color: gridColor }, ticks: { color: tickColor } },
+              y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, stepSize: 1 } }
+            }
+          }
+        });
+
+        new Chart(document.getElementById('chartStatus'), {
+          type: 'doughnut',
+          data: {
+            labels: c.statusLabels,
+            datasets: [{
+              data: c.statusValues,
+              backgroundColor: ['#3b82f6', '#6366f1', '#f59e0b', '#10b981', '#64748b'],
+              borderWidth: 0, hoverOffset: 8
+            }]
+          },
+          options: {
+            cutout: '68%',
+            plugins: { legend: { position: 'bottom', labels: { color: tickColor, usePointStyle: true, pointStyle: 'circle', padding: 12, font: { size: 11 } } } }
+          }
+        });
+      } catch (e) { EOF.toast(e.message, 'error'); }
+    }
+
+    async function renderRecent() {
+      try {
+        const r = await EOF.api('dash.recent', {});
+        const smEl = document.getElementById('recent-sm');
+        const smHtml = (r.suratMasuk && r.suratMasuk.length) ? r.suratMasuk.map(function (s) {
+          return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="window.top.location.href=EOF.appUrl(\\'detail\\',{id:\\''+s.id+'\\',type:\\'sm\\'})">' +
+            '<div class="avatar" style="background:var(--gradient-3);width:36px;height:36px">' + EOF.initials(s.pengirim) + '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div class="fw-600" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + EOF.escapeHtml(s.perihal) + '</div>' +
+              '<div class="text-sm text-muted">' + EOF.escapeHtml(s.pengirim) + ' · ' + EOF.timeAgo(s.createdAt) + '</div>' +
+            '</div>' +
+            EOF.statusBadge(s.status) +
+          '</div>';
+        }).join('') : emptyBlock('Belum ada surat masuk');
+        smEl.innerHTML = smHtml;
+
+        const trEl = document.getElementById('recent-track');
+        const trHtml = (r.tracking && r.tracking.length)
+          ? '<div class="timeline" style="padding-left:26px">' + r.tracking.map(function (t, i) {
+              const vClass = /selesai|setuju/i.test(t.action) ? 'success' : /tolak|hapus/i.test(t.action) ? 'warning' : '';
+              return '<div class="timeline-item ' + vClass + '" style="animation-delay:' + (i*0.04) + 's;padding-bottom:14px">' +
+                '<div class="timeline-dot"></div>' +
+                '<div class="timeline-title">' + EOF.escapeHtml(t.action) + '</div>' +
+                '<div class="timeline-meta">' + EOF.escapeHtml(t.actor || '-') + ' · ' + EOF.timeAgo(t.timestamp) + '</div>' +
+                (t.detail ? '<div class="timeline-detail text-sm">' + EOF.escapeHtml(t.detail) + '</div>' : '') +
+              '</div>';
+            }).join('') + '</div>'
+          : emptyBlock('Belum ada aktivitas');
+        trEl.innerHTML = trHtml;
+      } catch (e) { EOF.toast(e.message, 'error'); }
+    }
+    function emptyBlock(msg) {
+      return '<div class="empty"><div class="empty-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>' + msg + '</div>';
+    }
+
+    setTimeout(function(){ renderStats(); renderCharts(); renderRecent(); }, 50);
+  </script>
+</body>
+</html>

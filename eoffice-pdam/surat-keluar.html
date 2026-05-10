@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Surat Keluar - E-Office PDAM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+</head>
+<body>
+  <?!= include('scripts'); ?>
+  <script>
+    window.APP_URL = '<?= webAppUrl ?>';
+    window.EOF_LAYOUT_PAGE = 'surat-keluar';
+    window.EOF_LAYOUT_TITLE = 'Surat Keluar';
+    window.PAGE_PARAMS = <?!= JSON.stringify(params || {}) ?>;
+  </script>
+  <?!= include('layout'); ?>
+
+  <script>
+    const page = document.getElementById('eof-page');
+    const STATUSES = ['', 'Draft', 'Menunggu Approval', 'Disetujui', 'Ditolak', 'Terkirim', 'Diarsipkan'];
+
+    page.innerHTML = `
+      <div class="page-head">
+        <div>
+          <div class="page-title">Surat Keluar</div>
+          <div class="page-sub">Kelola surat keluar, ajukan approval, dan distribusi.</div>
+        </div>
+        <button class="btn" id="btn-new">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Surat Keluar Baru
+        </button>
+      </div>
+
+      <div class="card anim-fade">
+        <div class="flex gap-3 mb-4" style="flex-wrap:wrap">
+          <div style="flex:1;min-width:220px;position:relative">
+            <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text-soft)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="input" id="f-q" placeholder="Cari nomor surat, tujuan, perihal..." style="padding-left:38px">
+          </div>
+          <select class="select" id="f-status" style="width:220px">
+            ${STATUSES.map(s => '<option value="'+s+'">'+(s||'Semua Status')+'</option>').join('')}
+          </select>
+          <button class="btn btn-ghost" id="btn-reload">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Refresh
+          </button>
+        </div>
+        <div id="tbl-wrap"><div class="loader-wrap"><div class="spinner spinner-lg"></div></div></div>
+      </div>
+    `;
+
+    const qEl = document.getElementById('f-q');
+    const statusEl = document.getElementById('f-status');
+    if (window.PAGE_PARAMS.q) qEl.value = window.PAGE_PARAMS.q;
+
+    document.getElementById('btn-new').addEventListener('click', openForm);
+    document.getElementById('btn-reload').addEventListener('click', load);
+    qEl.addEventListener('input', (function(){let t;return function(){clearTimeout(t);t=setTimeout(load,300);};})());
+    statusEl.addEventListener('change', load);
+
+    if (window.PAGE_PARAMS.action === 'new') openForm();
+
+    async function load() {
+      const wrap = document.getElementById('tbl-wrap');
+      wrap.innerHTML = '<div class="loader-wrap"><div class="spinner spinner-lg"></div></div>';
+      try {
+        const rows = await EOF.api('sk.list', { q: qEl.value.trim(), status: statusEl.value });
+        if (!rows.length) {
+          wrap.innerHTML = '<div class="empty"><div class="empty-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><polyline points="4 13 12 7 20 13"/></svg></div>Belum ada surat keluar.</div>';
+          return;
+        }
+        const canApprove = ['Admin','Pimpinan'].includes((EOF.state.user||{}).role);
+        wrap.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr>' +
+          '<th>No. Surat</th><th>Perihal</th><th>Tujuan</th><th>Tanggal</th><th>Status</th><th></th>' +
+          '</tr></thead><tbody>' +
+          rows.map(r => (
+            '<tr style="cursor:pointer" data-id="' + r.id + '">' +
+              '<td><div class="fw-600">' + EOF.escapeHtml(r.noSurat) + '</div></td>' +
+              '<td style="max-width:280px"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + EOF.escapeHtml(r.perihal) + '</div></td>' +
+              '<td>' + EOF.escapeHtml(r.tujuan) + '</td>' +
+              '<td>' + EOF.fmtDate(r.tanggalSurat) + '</td>' +
+              '<td>' + EOF.statusBadge(r.status) + '</td>' +
+              '<td class="text-right" style="white-space:nowrap">' +
+                (canApprove && r.status === 'Menunggu Approval'
+                  ? '<button class="btn btn-success btn-sm" data-act="approve" data-id="'+r.id+'">Setujui</button> ' : '') +
+                '<button class="btn btn-soft btn-sm" data-act="detail" data-id="'+r.id+'">Detail</button>' +
+              '</td>' +
+            '</tr>'
+          )).join('') + '</tbody></table></div>';
+
+        wrap.querySelectorAll('[data-act=detail]').forEach(b => b.addEventListener('click', e => {
+          e.stopPropagation();
+          window.top.location.href = EOF.appUrl('detail', { id: b.getAttribute('data-id'), type: 'sk' });
+        }));
+        wrap.querySelectorAll('[data-act=approve]').forEach(b => b.addEventListener('click', async e => {
+          e.stopPropagation();
+          const ok = await EOF.confirm('Setujui surat keluar ini?');
+          if (!ok) return;
+          try { await EOF.api('sk.approve', { id: b.getAttribute('data-id'), approve: true }); EOF.toast('Disetujui.'); load(); }
+          catch (err) { EOF.toast(err.message, 'error'); }
+        }));
+        wrap.querySelectorAll('tr[data-id]').forEach(tr => {
+          tr.addEventListener('click', e => {
+            if (e.target.closest('button')) return;
+            window.top.location.href = EOF.appUrl('detail', { id: tr.getAttribute('data-id'), type: 'sk' });
+          });
+        });
+      } catch (err) { wrap.innerHTML = '<div class="empty">Gagal memuat: ' + EOF.escapeHtml(err.message) + '</div>'; }
+    }
+
+    function openForm() {
+      const m = EOF.modal({
+        title: 'Buat Surat Keluar Baru',
+        body: `
+          <form id="form-sk">
+            <div class="form-row">
+              <label>Tujuan *</label>
+              <input class="input" name="tujuan" required placeholder="Penerima surat">
+            </div>
+            <div class="form-row">
+              <label>Perihal *</label>
+              <input class="input" name="perihal" required placeholder="Perihal surat">
+            </div>
+            <div class="grid grid-3">
+              <div class="form-row">
+                <label>Tanggal Surat</label>
+                <input class="input" type="date" name="tanggalSurat">
+              </div>
+              <div class="form-row">
+                <label>Sifat</label>
+                <select class="select" name="sifat">
+                  <option>Biasa</option><option>Penting</option><option>Segera</option><option>Rahasia</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Jenis</label>
+                <select class="select" name="jenis">
+                  <option>Umum</option><option>Undangan</option><option>Balasan</option><option>Pemberitahuan</option><option>Edaran</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <label>Isi Singkat</label>
+              <textarea class="input" name="isi" style="min-height:100px" placeholder="Isi singkat surat..."></textarea>
+            </div>
+            <div class="grid grid-2">
+              <div class="form-row">
+                <label>Lampiran (PDF / Gambar)</label>
+                <input class="input" type="file" name="file" accept=".pdf,image/*">
+              </div>
+              <div class="form-row">
+                <label>Simpan sebagai</label>
+                <select class="select" name="status">
+                  <option value="Draft">Draft (ubah nanti)</option>
+                  <option value="Menunggu Approval">Ajukan Approval Pimpinan</option>
+                </select>
+              </div>
+            </div>
+          </form>
+        `,
+        footer:
+          '<button class="btn btn-ghost" data-close>Batal</button>' +
+          '<button class="btn" id="sk-save">Simpan</button>',
+        onOpen: (el, close) => {
+          el.querySelector('#sk-save').addEventListener('click', async () => {
+            const f = el.querySelector('#form-sk');
+            const d = Object.fromEntries(new FormData(f).entries());
+            if (!d.tujuan || !d.perihal) { EOF.toast('Tujuan & perihal wajib', 'error'); return; }
+            const file = f.querySelector('[name=file]').files[0];
+            if (file) { d.fileDataUrl = await EOF.fileToDataURL(file); d.fileName = file.name; }
+            const btn = el.querySelector('#sk-save'); btn.disabled = true; btn.textContent = 'Menyimpan...';
+            try {
+              await EOF.api('sk.create', { data: d });
+              EOF.toast('Surat keluar berhasil dibuat!');
+              close(); load();
+            } catch (e) { EOF.toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Simpan'; }
+          });
+        }
+      });
+    }
+
+    setTimeout(load, 50);
+  </script>
+</body>
+</html>

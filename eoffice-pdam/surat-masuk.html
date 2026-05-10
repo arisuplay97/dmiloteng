@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Surat Masuk - E-Office PDAM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+</head>
+<body>
+  <?!= include('scripts'); ?>
+  <script>
+    window.APP_URL = '<?= webAppUrl ?>';
+    window.EOF_LAYOUT_PAGE = 'surat-masuk';
+    window.EOF_LAYOUT_TITLE = 'Surat Masuk';
+    window.PAGE_PARAMS = <?!= JSON.stringify(params || {}) ?>;
+  </script>
+  <?!= include('layout'); ?>
+
+  <script>
+    const page = document.getElementById('eof-page');
+    const STATUSES = ['', 'Baru', 'Didisposisi', 'Diproses', 'Selesai', 'Diarsipkan'];
+
+    page.innerHTML = `
+      <div class="page-head">
+        <div>
+          <div class="page-title">Surat Masuk</div>
+          <div class="page-sub">Kelola semua surat masuk, lakukan disposisi, dan pantau statusnya.</div>
+        </div>
+        <button class="btn" id="btn-new">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Surat Masuk Baru
+        </button>
+      </div>
+
+      <div class="card anim-fade">
+        <div class="flex gap-3 mb-4" style="flex-wrap:wrap">
+          <div class="input-ico" style="flex:1;min-width:220px;position:relative">
+            <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text-soft)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="input" id="f-q" placeholder="Cari nomor agenda, pengirim, perihal..." style="padding-left:38px">
+          </div>
+          <select class="select" id="f-status" style="width:200px">
+            ${STATUSES.map(s => '<option value="'+s+'">'+(s||'Semua Status')+'</option>').join('')}
+          </select>
+          <button class="btn btn-ghost" id="btn-reload">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Refresh
+          </button>
+        </div>
+
+        <div id="tbl-wrap">
+          <div class="loader-wrap"><div class="spinner spinner-lg"></div></div>
+        </div>
+      </div>
+    `;
+
+    const qEl = document.getElementById('f-q');
+    const statusEl = document.getElementById('f-status');
+    if (window.PAGE_PARAMS.q) qEl.value = window.PAGE_PARAMS.q;
+
+    document.getElementById('btn-new').addEventListener('click', openForm);
+    document.getElementById('btn-reload').addEventListener('click', load);
+    qEl.addEventListener('input', debounce(load, 300));
+    statusEl.addEventListener('change', load);
+
+    if (window.PAGE_PARAMS.action === 'new') openForm();
+
+    function debounce(fn, ms) { let t; return function(){ clearTimeout(t); t=setTimeout(fn, ms); }; }
+
+    async function load() {
+      const wrap = document.getElementById('tbl-wrap');
+      wrap.innerHTML = '<div class="loader-wrap"><div class="spinner spinner-lg"></div></div>';
+      try {
+        const rows = await EOF.api('sm.list', { q: qEl.value.trim(), status: statusEl.value });
+        if (!rows.length) {
+          wrap.innerHTML = '<div class="empty"><div class="empty-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><polyline points="4 7 12 13 20 7"/></svg></div>Belum ada surat masuk yang cocok.</div>';
+          return;
+        }
+        wrap.innerHTML =
+          '<div class="table-wrap"><table class="table"><thead><tr>' +
+            '<th>No. Agenda</th>' +
+            '<th>Perihal</th>' +
+            '<th>Pengirim</th>' +
+            '<th>Diterima</th>' +
+            '<th>Sifat</th>' +
+            '<th>Status</th>' +
+            '<th></th>' +
+          '</tr></thead><tbody>' +
+          rows.map(r => (
+            '<tr style="cursor:pointer" data-id="' + r.id + '">' +
+              '<td><div class="fw-600">' + EOF.escapeHtml(r.noAgenda) + '</div>' +
+                '<div class="text-sm text-muted">' + EOF.escapeHtml(r.noSurat || '-') + '</div></td>' +
+              '<td style="max-width:280px"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + EOF.escapeHtml(r.perihal) + '</div></td>' +
+              '<td>' + EOF.escapeHtml(r.pengirim) + '</td>' +
+              '<td>' + EOF.fmtDate(r.tanggalTerima) + '</td>' +
+              '<td>' + sifatBadge(r.sifat) + '</td>' +
+              '<td>' + EOF.statusBadge(r.status) + '</td>' +
+              '<td class="text-right">' +
+                '<button class="btn btn-soft btn-sm" data-act="detail">Detail</button>' +
+              '</td>' +
+            '</tr>'
+          )).join('') +
+          '</tbody></table></div>';
+
+        wrap.querySelectorAll('tr[data-id]').forEach(tr => {
+          tr.addEventListener('click', (e) => {
+            const id = tr.getAttribute('data-id');
+            window.top.location.href = EOF.appUrl('detail', { id: id, type: 'sm' });
+          });
+        });
+      } catch (err) {
+        wrap.innerHTML = '<div class="empty">Gagal memuat: ' + EOF.escapeHtml(err.message) + '</div>';
+      }
+    }
+
+    function sifatBadge(s) {
+      const cls = s === 'Segera' ? 'warning' : s === 'Rahasia' ? 'danger' : s === 'Penting' ? 'info' : '';
+      return '<span class="badge ' + cls + '">' + EOF.escapeHtml(s || 'Biasa') + '</span>';
+    }
+
+    function openForm() {
+      const m = EOF.modal({
+        title: 'Input Surat Masuk Baru',
+        body: `
+          <form id="form-sm">
+            <div class="grid grid-2">
+              <div class="form-row">
+                <label>No. Surat Asli</label>
+                <input class="input" name="noSurat" placeholder="mis. 005/DIR/VI/2026">
+              </div>
+              <div class="form-row">
+                <label>Tanggal Surat</label>
+                <input class="input" type="date" name="tanggalSurat">
+              </div>
+            </div>
+            <div class="form-row">
+              <label>Pengirim *</label>
+              <input class="input" name="pengirim" required placeholder="Nama instansi / pengirim">
+            </div>
+            <div class="form-row">
+              <label>Perihal *</label>
+              <input class="input" name="perihal" required placeholder="Perihal surat">
+            </div>
+            <div class="grid grid-2">
+              <div class="form-row">
+                <label>Sifat</label>
+                <select class="select" name="sifat">
+                  <option>Biasa</option><option>Penting</option><option>Segera</option><option>Rahasia</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label>Jenis</label>
+                <select class="select" name="jenis">
+                  <option>Umum</option><option>Undangan</option><option>Permohonan</option><option>Pemberitahuan</option><option>Edaran</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <label>Keterangan</label>
+              <textarea class="input" name="keterangan" placeholder="Catatan tambahan..."></textarea>
+            </div>
+            <div class="form-row">
+              <label>Lampiran (PDF / Gambar)</label>
+              <input class="input" type="file" name="file" accept=".pdf,image/*">
+            </div>
+          </form>
+        `,
+        footer:
+          '<button class="btn btn-ghost" data-close>Batal</button>' +
+          '<button class="btn" id="sm-save"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Simpan</button>',
+        onOpen: (el, close) => {
+          el.querySelector('#sm-save').addEventListener('click', async () => {
+            const f = el.querySelector('#form-sm');
+            const d = Object.fromEntries(new FormData(f).entries());
+            if (!d.pengirim || !d.perihal) { EOF.toast('Pengirim & perihal wajib diisi', 'error'); return; }
+            const file = f.querySelector('[name=file]').files[0];
+            if (file) {
+              d.fileDataUrl = await EOF.fileToDataURL(file);
+              d.fileName = file.name;
+            }
+            const btn = el.querySelector('#sm-save'); btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px"></div>Menyimpan...';
+            try {
+              await EOF.api('sm.create', { data: d });
+              EOF.toast('Surat masuk berhasil diinput!');
+              close(); load();
+            } catch (e) { EOF.toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Simpan'; }
+          });
+        }
+      });
+    }
+
+    setTimeout(load, 50);
+  </script>
+</body>
+</html>

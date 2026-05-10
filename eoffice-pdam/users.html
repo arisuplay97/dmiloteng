@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Manajemen User - E-Office PDAM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+</head>
+<body>
+  <?!= include('scripts'); ?>
+  <script>
+    window.APP_URL = '<?= webAppUrl ?>';
+    window.EOF_LAYOUT_PAGE = 'users';
+    window.EOF_LAYOUT_TITLE = 'Manajemen User';
+  </script>
+  <?!= include('layout'); ?>
+
+  <script>
+    // Admin only
+    if ((EOF.state.user||{}).role !== 'Admin') {
+      window.top.location.href = EOF.appUrl('dashboard');
+    }
+
+    const page = document.getElementById('eof-page');
+    const ROLES = ['Admin', 'Pimpinan', 'Sekretaris', 'Staff'];
+
+    page.innerHTML = `
+      <div class="page-head">
+        <div>
+          <div class="page-title">Manajemen User</div>
+          <div class="page-sub">Kelola pengguna, role, dan akses sistem.</div>
+        </div>
+        <button class="btn" id="btn-new">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Tambah User
+        </button>
+      </div>
+
+      <div class="card anim-fade">
+        <div id="list"><div class="loader-wrap"><div class="spinner spinner-lg"></div></div></div>
+      </div>
+    `;
+
+    document.getElementById('btn-new').addEventListener('click', () => openForm(null));
+
+    async function load() {
+      const el = document.getElementById('list');
+      el.innerHTML = '<div class="loader-wrap"><div class="spinner spinner-lg"></div></div>';
+      try {
+        const users = await EOF.api('user.list', {});
+        if (!users.length) { el.innerHTML = '<div class="empty">Belum ada user.</div>'; return; }
+        el.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr>' +
+          '<th>Nama</th><th>Username</th><th>Jabatan / Unit</th><th>Role</th><th></th>' +
+          '</tr></thead><tbody>' +
+          users.map(u => (
+            '<tr>' +
+              '<td><div class="flex items-center gap-2">' +
+                '<span class="avatar" style="width:32px;height:32px;font-size:12px">' + EOF.initials(u.nama) + '</span>' +
+                '<div><div class="fw-600">' + EOF.escapeHtml(u.nama) + '</div><div class="text-sm text-muted">' + EOF.escapeHtml(u.email||'-') + '</div></div>' +
+              '</div></td>' +
+              '<td><code style="font-size:12px">' + EOF.escapeHtml(u.username) + '</code></td>' +
+              '<td>' + EOF.escapeHtml(u.jabatan||'-') + '<div class="text-sm text-muted">' + EOF.escapeHtml(u.unit||'-') + '</div></td>' +
+              '<td>' + roleBadge(u.role) + '</td>' +
+              '<td class="text-right" style="white-space:nowrap">' +
+                '<button class="btn btn-soft btn-sm" data-edit="' + u.id + '">Edit</button> ' +
+                (u.username !== 'admin' ? '<button class="btn btn-danger btn-sm" data-del="' + u.id + '">Hapus</button>' : '') +
+              '</td>' +
+            '</tr>'
+          )).join('') + '</tbody></table></div>';
+
+        el.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => {
+          const u = users.find(x => x.id === b.getAttribute('data-edit'));
+          openForm(u);
+        }));
+        el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+          if (!(await EOF.confirm('Hapus user ini?'))) return;
+          try { await EOF.api('user.delete', { id: b.getAttribute('data-del') }); EOF.toast('User dihapus'); load(); }
+          catch (e) { EOF.toast(e.message, 'error'); }
+        }));
+      } catch (e) { el.innerHTML = '<div class="empty">Gagal memuat: ' + EOF.escapeHtml(e.message) + '</div>'; }
+    }
+
+    function roleBadge(r) {
+      const cls = r === 'Admin' ? 'danger' : r === 'Pimpinan' ? 'primary' : r === 'Sekretaris' ? 'info' : '';
+      return '<span class="badge ' + cls + '">' + EOF.escapeHtml(r) + '</span>';
+    }
+
+    function openForm(u) {
+      const isEdit = !!u;
+      EOF.modal({
+        title: isEdit ? 'Edit User' : 'Tambah User Baru',
+        body: `
+          <div class="grid grid-2">
+            <div class="form-row">
+              <label>Username *</label>
+              <input class="input" id="u-username" required value="${isEdit ? EOF.escapeHtml(u.username) : ''}" ${isEdit ? 'disabled' : ''}>
+            </div>
+            <div class="form-row">
+              <label>Password ${isEdit ? '(kosongkan jika tidak ganti)' : '*'}</label>
+              <input class="input" type="password" id="u-password" ${isEdit ? '' : 'required'}>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Nama Lengkap *</label>
+            <input class="input" id="u-nama" required value="${isEdit ? EOF.escapeHtml(u.nama) : ''}">
+          </div>
+          <div class="grid grid-2">
+            <div class="form-row">
+              <label>Email</label>
+              <input class="input" type="email" id="u-email" value="${isEdit ? EOF.escapeHtml(u.email||'') : ''}">
+            </div>
+            <div class="form-row">
+              <label>Jabatan</label>
+              <input class="input" id="u-jabatan" value="${isEdit ? EOF.escapeHtml(u.jabatan||'') : ''}">
+            </div>
+          </div>
+          <div class="grid grid-2">
+            <div class="form-row">
+              <label>Unit / Bagian</label>
+              <input class="input" id="u-unit" value="${isEdit ? EOF.escapeHtml(u.unit||'') : ''}">
+            </div>
+            <div class="form-row">
+              <label>Role *</label>
+              <select class="select" id="u-role">
+                ${ROLES.map(r => '<option value="'+r+'"'+(isEdit && u.role===r?' selected':'')+'>'+r+'</option>').join('')}
+              </select>
+            </div>
+          </div>
+        `,
+        footer: '<button class="btn btn-ghost" data-close>Batal</button><button class="btn" id="u-save">Simpan</button>',
+        onOpen: (el, close) => {
+          el.querySelector('#u-save').addEventListener('click', async () => {
+            const payload = {
+              username: el.querySelector('#u-username').value.trim(),
+              password: el.querySelector('#u-password').value,
+              nama: el.querySelector('#u-nama').value.trim(),
+              email: el.querySelector('#u-email').value.trim(),
+              jabatan: el.querySelector('#u-jabatan').value.trim(),
+              unit: el.querySelector('#u-unit').value.trim(),
+              role: el.querySelector('#u-role').value
+            };
+            try {
+              if (isEdit) {
+                payload.id = u.id;
+                await EOF.api('user.update', { user: payload });
+              } else {
+                if (!payload.password || !payload.username || !payload.nama) {
+                  EOF.toast('Lengkapi username, password, nama', 'error'); return;
+                }
+                await EOF.api('user.create', { user: payload });
+              }
+              EOF.toast(isEdit ? 'User diperbarui' : 'User ditambahkan');
+              close(); load();
+            } catch (e) { EOF.toast(e.message, 'error'); }
+          });
+        }
+      });
+    }
+
+    setTimeout(load, 50);
+  </script>
+</body>
+</html>

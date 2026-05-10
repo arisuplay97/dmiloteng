@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Detail Surat - E-Office PDAM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+  <?!= include('scripts'); ?>
+  <script>
+    window.APP_URL = '<?= webAppUrl ?>';
+    window.EOF_LAYOUT_PAGE = 'tracking';
+    window.EOF_LAYOUT_TITLE = 'Detail Surat';
+    window.PAGE_PARAMS = <?!= JSON.stringify(params || {}) ?>;
+  </script>
+  <?!= include('layout'); ?>
+
+  <script>
+    const page = document.getElementById('eof-page');
+    const id = window.PAGE_PARAMS.id;
+    const type = window.PAGE_PARAMS.type || 'sm';
+
+    if (!id) {
+      page.innerHTML = '<div class="empty">ID surat tidak diberikan.</div>';
+    } else {
+      page.innerHTML = '<div class="loader-wrap"><div class="spinner spinner-lg"></div></div>';
+      load();
+    }
+
+    async function load() {
+      try {
+        const action = type === 'sk' ? 'sk.get' : 'sm.get';
+        const res = await EOF.api(action, { id: id });
+        const s = res.surat;
+        const tracking = res.tracking || [];
+        const disposisi = res.disposisi || [];
+        const users = (EOF.state.user && ['Admin','Pimpinan','Sekretaris'].includes(EOF.state.user.role))
+          ? await EOF.api('user.list', {}).catch(() => []) : [];
+
+        render(s, tracking, disposisi, users);
+      } catch (e) {
+        page.innerHTML = '<div class="empty">Gagal memuat: ' + EOF.escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    function render(s, tracking, disposisi, users) {
+      const isSM = type !== 'sk';
+      const canApprove = !isSM && ['Admin','Pimpinan'].includes((EOF.state.user||{}).role) && s.status === 'Menunggu Approval';
+      const canDisposisi = isSM && ['Admin','Pimpinan','Sekretaris'].includes((EOF.state.user||{}).role);
+      const canEdit = ['Admin','Sekretaris'].includes((EOF.state.user||{}).role);
+
+      page.innerHTML = `
+        <div class="page-head">
+          <div>
+            <button class="btn btn-ghost btn-sm mb-3" onclick="history.back()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              Kembali
+            </button>
+            <div class="page-title">${EOF.escapeHtml(s.perihal || '-')}</div>
+            <div class="page-sub">${isSM ? 'Surat Masuk' : 'Surat Keluar'} · ${isSM ? EOF.escapeHtml(s.noAgenda) : EOF.escapeHtml(s.noSurat)}</div>
+          </div>
+          <div class="flex gap-2">
+            ${canDisposisi ? '<button class="btn" id="btn-disp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Buat Disposisi</button>' : ''}
+            ${canApprove ? '<button class="btn btn-success" id="btn-approve">Setujui</button><button class="btn btn-danger" id="btn-reject">Tolak</button>' : ''}
+            <button class="btn btn-ghost" id="btn-print">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Cetak
+            </button>
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: 2fr 1fr; gap: 16px">
+          <div>
+            <div class="card anim-fade">
+              <div class="card-header"><div class="card-title">Informasi Surat</div>${EOF.statusBadge(s.status)}</div>
+              <div class="grid grid-2" style="gap:16px">
+                ${isSM ? kv('No. Agenda', s.noAgenda) : ''}
+                ${isSM ? kv('No. Surat Asli', s.noSurat || '-') : kv('No. Surat', s.noSurat)}
+                ${isSM ? kv('Tgl. Surat', EOF.fmtDate(s.tanggalSurat)) : kv('Tgl. Surat', EOF.fmtDate(s.tanggalSurat))}
+                ${isSM ? kv('Tgl. Diterima', EOF.fmtDate(s.tanggalTerima)) : kv('Dibuat Oleh', s.createdBy)}
+                ${isSM ? kv('Pengirim', s.pengirim) : kv('Tujuan', s.tujuan)}
+                ${kv('Sifat', '<span class="badge '+(s.sifat==='Segera'?'warning':s.sifat==='Rahasia'?'danger':s.sifat==='Penting'?'info':'')+'">'+EOF.escapeHtml(s.sifat||'Biasa')+'</span>')}
+                ${kv('Jenis', s.jenis || '-')}
+                ${!isSM && s.approvedBy ? kv('Disetujui', EOF.escapeHtml(s.approvedBy) + ' · ' + EOF.fmtDate(s.approvedAt, true)) : ''}
+              </div>
+              ${isSM && s.keterangan ? '<div class="mt-4"><div class="text-sm text-muted mb-2">Keterangan</div><div>' + EOF.escapeHtml(s.keterangan) + '</div></div>' : ''}
+              ${!isSM && s.isi ? '<div class="mt-4"><div class="text-sm text-muted mb-2">Isi Surat</div><div style="padding:12px;background:var(--surface-2);border-radius:10px;white-space:pre-wrap">' + EOF.escapeHtml(s.isi) + '</div></div>' : ''}
+              ${s.fileUrl ? '<div class="mt-4"><a class="btn btn-soft" href="' + s.fileUrl + '" target="_blank"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Lampiran</a></div>' : ''}
+            </div>
+
+            ${isSM ? disposisiCard(disposisi) : ''}
+
+            <div class="card mt-4 anim-fade">
+              <div class="card-header"><div class="card-title">Timeline / Tracking</div></div>
+              ${timelineHtml(tracking, disposisi)}
+            </div>
+          </div>
+
+          <div>
+            <div class="card text-center anim-fade">
+              <div class="card-title mb-3">QR / Barcode</div>
+              <div class="qr-frame anim-float"><div id="qr"></div></div>
+              <div class="mt-3 text-sm text-muted">Scan untuk tracking cepat</div>
+              <div class="mt-2 fw-600" style="word-break:break-all;font-family:monospace;font-size:12px">${EOF.escapeHtml(s.barcode || '-')}</div>
+              <button class="btn btn-soft w-full mt-3" id="btn-copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Salin Kode
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // QR render
+      new QRCode(document.getElementById('qr'), {
+        text: s.barcode || ('EOF-' + s.id),
+        width: 180, height: 180,
+        colorDark: '#0f172a', colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H
+      });
+
+      // Copy
+      document.getElementById('btn-copy').addEventListener('click', () => {
+        navigator.clipboard.writeText(s.barcode || '').then(() => EOF.toast('Kode disalin'));
+      });
+
+      // Print
+      document.getElementById('btn-print').addEventListener('click', () => window.print());
+
+      if (canDisposisi) {
+        document.getElementById('btn-disp').addEventListener('click', () => openDispForm(s.id, users));
+      }
+      if (canApprove) {
+        document.getElementById('btn-approve').addEventListener('click', async () => {
+          if (!(await EOF.confirm('Setujui surat keluar ini?'))) return;
+          try { await EOF.api('sk.approve', { id: s.id, approve: true }); EOF.toast('Disetujui.'); load(); }
+          catch (e) { EOF.toast(e.message, 'error'); }
+        });
+        document.getElementById('btn-reject').addEventListener('click', async () => {
+          if (!(await EOF.confirm('Tolak surat keluar ini?'))) return;
+          try { await EOF.api('sk.approve', { id: s.id, approve: false }); EOF.toast('Ditolak.'); load(); }
+          catch (e) { EOF.toast(e.message, 'error'); }
+        });
+      }
+    }
+
+    function kv(label, value) {
+      return '<div><div class="text-sm text-muted">' + label + '</div><div class="fw-600" style="margin-top:2px">' + value + '</div></div>';
+    }
+
+    function disposisiCard(disposisi) {
+      if (!disposisi || !disposisi.length) {
+        return '<div class="card mt-4 anim-fade"><div class="card-header"><div class="card-title">Disposisi</div></div><div class="text-muted text-sm">Belum ada disposisi pada surat ini.</div></div>';
+      }
+      const rows = disposisi.sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)).map(d => {
+        const canRespond = d.toUser === (EOF.state.user||{}).username && d.status !== 'Selesai';
+        return '<div class="card" style="background:var(--surface-2);margin-bottom:10px;padding:14px">' +
+          '<div class="flex items-center justify-between gap-3 mb-2">' +
+            '<div class="flex items-center gap-2 fw-600"><span class="avatar" style="width:26px;height:26px;font-size:11px">' + EOF.initials(d.fromUser) + '</span>' +
+            EOF.escapeHtml(d.fromUser) + ' <span class="text-muted">→</span> ' +
+            '<span class="avatar" style="width:26px;height:26px;font-size:11px;background:var(--gradient-3)">' + EOF.initials(d.toUser) + '</span>' +
+            EOF.escapeHtml(d.toUser) + '</div>' +
+            EOF.statusBadge(d.status) +
+          '</div>' +
+          '<div class="text-sm"><b>Instruksi:</b> ' + EOF.escapeHtml(d.instruksi) + '</div>' +
+          (d.catatan ? '<div class="text-sm text-muted mt-2">Catatan: ' + EOF.escapeHtml(d.catatan) + '</div>' : '') +
+          (d.response ? '<div class="mt-2" style="padding:10px;background:var(--surface);border-left:3px solid var(--success);border-radius:8px"><div class="text-sm text-muted">Respon ' + EOF.fmtDate(d.respondedAt, true) + '</div><div>' + EOF.escapeHtml(d.response) + '</div></div>' : '') +
+          '<div class="mt-2 text-sm text-muted">' + EOF.fmtDate(d.createdAt, true) +
+          (canRespond ? ' · <a href="#" data-respond="'+d.id+'">Beri Respon</a>' : '') +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      setTimeout(() => {
+        document.querySelectorAll('[data-respond]').forEach(a => a.addEventListener('click', e => {
+          e.preventDefault();
+          openRespond(a.getAttribute('data-respond'));
+        }));
+      }, 0);
+
+      return '<div class="card mt-4 anim-fade"><div class="card-header"><div class="card-title">Disposisi</div></div>' + rows + '</div>';
+    }
+
+    function openRespond(dispId) {
+      EOF.modal({
+        title: 'Respon Disposisi',
+        body: `
+          <div class="form-row">
+            <label>Status</label>
+            <select class="select" id="rp-status">
+              <option>Diproses</option><option>Selesai</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Respon / Tindak Lanjut *</label>
+            <textarea class="input" id="rp-note" required placeholder="Tulis tindak lanjut yang sudah dilakukan..."></textarea>
+          </div>
+        `,
+        footer: '<button class="btn btn-ghost" data-close>Batal</button><button class="btn" id="rp-save">Kirim Respon</button>',
+        onOpen: (el, close) => {
+          el.querySelector('#rp-save').addEventListener('click', async () => {
+            const st = el.querySelector('#rp-status').value;
+            const rs = el.querySelector('#rp-note').value.trim();
+            if (!rs) { EOF.toast('Respon wajib diisi', 'error'); return; }
+            try { await EOF.api('disp.respond', { data: { id: dispId, status: st, response: rs } }); EOF.toast('Respon terkirim.'); close(); load(); }
+            catch (e) { EOF.toast(e.message, 'error'); }
+          });
+        }
+      });
+    }
+
+    function openDispForm(suratId, users) {
+      const opts = users.filter(u => u.username !== (EOF.state.user||{}).username)
+        .map(u => '<option value="'+EOF.escapeHtml(u.username)+'">'+EOF.escapeHtml(u.nama)+' — '+EOF.escapeHtml(u.jabatan||u.role)+'</option>').join('');
+      EOF.modal({
+        title: 'Buat Disposisi',
+        body: `
+          <div class="form-row">
+            <label>Teruskan kepada *</label>
+            <select class="select" id="d-user" required>
+              <option value="">-- Pilih pegawai --</option>${opts}
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Instruksi *</label>
+            <textarea class="input" id="d-ins" required placeholder="Tindaklanjuti, Koordinasikan, Pelajari..."></textarea>
+          </div>
+          <div class="form-row">
+            <label>Catatan</label>
+            <input class="input" id="d-note">
+          </div>
+        `,
+        footer: '<button class="btn btn-ghost" data-close>Batal</button><button class="btn" id="d-save">Kirim</button>',
+        onOpen: (el, close) => {
+          el.querySelector('#d-save').addEventListener('click', async () => {
+            const u = el.querySelector('#d-user').value;
+            const ins = el.querySelector('#d-ins').value.trim();
+            const note = el.querySelector('#d-note').value.trim();
+            if (!u || !ins) { EOF.toast('Pegawai & instruksi wajib', 'error'); return; }
+            try {
+              await EOF.api('disp.create', { data: { suratId: suratId, toUser: u, instruksi: ins, catatan: note } });
+              EOF.toast('Disposisi terkirim.'); close(); load();
+            } catch (e) { EOF.toast(e.message, 'error'); }
+          });
+        }
+      });
+    }
+
+    function timelineHtml(tracking, disposisi) {
+      const events = [];
+      (tracking || []).forEach(t => events.push({ ts: t.timestamp, title: t.action, actor: t.actor, detail: t.detail, kind: 'track' }));
+      (disposisi || []).forEach(d => {
+        events.push({ ts: d.createdAt, title: 'Disposisi ke ' + d.toUser, actor: d.fromUser, detail: d.instruksi, kind: 'disp' });
+        if (d.respondedAt) events.push({ ts: d.respondedAt, title: 'Disposisi ' + d.status, actor: d.toUser, detail: d.response || '', kind: 'disp-done' });
+      });
+      events.sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+      if (!events.length) return '<div class="text-muted text-sm">Belum ada aktivitas.</div>';
+      return '<div class="timeline">' + events.map((e,i) => {
+        const vCls = /selesai|setuju/i.test(e.title) ? 'success' : /tolak|hapus/i.test(e.title) ? 'warning' : '';
+        return '<div class="timeline-item ' + vCls + '" style="animation-delay:'+(i*0.04)+'s">' +
+          '<div class="timeline-dot"></div>' +
+          '<div class="timeline-title">' + EOF.escapeHtml(e.title) + '</div>' +
+          '<div class="timeline-meta">' + EOF.escapeHtml(e.actor||'-') + ' · ' + EOF.fmtDate(e.ts, true) + '</div>' +
+          (e.detail ? '<div class="timeline-detail">' + EOF.escapeHtml(e.detail) + '</div>' : '') +
+        '</div>';
+      }).join('') + '</div>';
+    }
+  </script>
+</body>
+</html>

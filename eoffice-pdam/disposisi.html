@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Disposisi - E-Office PDAM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+</head>
+<body>
+  <?!= include('scripts'); ?>
+  <script>
+    window.APP_URL = '<?= webAppUrl ?>';
+    window.EOF_LAYOUT_PAGE = 'disposisi';
+    window.EOF_LAYOUT_TITLE = 'Disposisi';
+  </script>
+  <?!= include('layout'); ?>
+
+  <script>
+    const page = document.getElementById('eof-page');
+    let activeTab = 'masuk'; // 'masuk' = untuk saya, 'keluar' = dari saya, 'semua'
+
+    page.innerHTML = `
+      <div class="page-head">
+        <div>
+          <div class="page-title">Disposisi</div>
+          <div class="page-sub">Kelola disposisi masuk dan keluar.</div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="masuk">Disposisi untuk Saya</div>
+        <div class="tab" data-tab="keluar">Disposisi dari Saya</div>
+        <div class="tab" data-tab="semua">Semua</div>
+      </div>
+
+      <div id="list"><div class="loader-wrap"><div class="spinner spinner-lg"></div></div></div>
+    `;
+
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      activeTab = t.getAttribute('data-tab');
+      load();
+    }));
+
+    async function load() {
+      const el = document.getElementById('list');
+      el.innerHTML = '<div class="loader-wrap"><div class="spinner spinner-lg"></div></div>';
+      try {
+        const me = (EOF.state.user || {}).username;
+        const payload = {};
+        if (activeTab === 'masuk') payload.toUser = me;
+        const data = await EOF.api('disp.list', payload);
+        let rows = data;
+        if (activeTab === 'keluar') rows = data.filter(d => d.fromUser === me);
+
+        if (!rows.length) {
+          el.innerHTML = '<div class="empty"><div class="empty-ico"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>Belum ada disposisi.</div>';
+          return;
+        }
+
+        el.innerHTML = '<div class="grid anim-stagger" style="gap:12px">' +
+          rows.map(d => (
+            '<div class="card" style="padding:16px;cursor:pointer" data-surat="' + d.suratId + '">' +
+              '<div class="flex items-center justify-between gap-3 mb-2">' +
+                '<div class="flex items-center gap-2 fw-600">' +
+                  '<span class="avatar" style="width:28px;height:28px;font-size:11px">' + EOF.initials(d.fromUser) + '</span>' +
+                  EOF.escapeHtml(d.fromUser) + ' <span class="text-muted">→</span> ' +
+                  '<span class="avatar" style="width:28px;height:28px;font-size:11px;background:var(--gradient-3)">' + EOF.initials(d.toUser) + '</span>' +
+                  EOF.escapeHtml(d.toUser) +
+                '</div>' +
+                EOF.statusBadge(d.status) +
+              '</div>' +
+              '<div><b>Instruksi:</b> ' + EOF.escapeHtml(d.instruksi) + '</div>' +
+              (d.response ? '<div class="mt-2 text-sm text-muted">Respon: ' + EOF.escapeHtml(d.response) + '</div>' : '') +
+              '<div class="mt-3 flex justify-between text-sm">' +
+                '<span class="text-muted">' + EOF.timeAgo(d.createdAt) + '</span>' +
+                '<a href="#">Lihat surat →</a>' +
+              '</div>' +
+            '</div>'
+          )).join('') + '</div>';
+
+        el.querySelectorAll('[data-surat]').forEach(c => c.addEventListener('click', () => {
+          window.top.location.href = EOF.appUrl('detail', { id: c.getAttribute('data-surat'), type: 'sm' });
+        }));
+      } catch (e) {
+        el.innerHTML = '<div class="empty">Gagal memuat: ' + EOF.escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    setTimeout(load, 50);
+  </script>
+</body>
+</html>

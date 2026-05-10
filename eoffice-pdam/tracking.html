@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Tracking - E-Office PDAM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+</head>
+<body>
+  <?!= include('scripts'); ?>
+  <script>
+    window.APP_URL = '<?= webAppUrl ?>';
+    window.EOF_LAYOUT_PAGE = 'tracking';
+    window.EOF_LAYOUT_TITLE = 'Tracking Surat';
+  </script>
+  <?!= include('layout'); ?>
+
+  <script>
+    const page = document.getElementById('eof-page');
+    page.innerHTML = `
+      <div class="page-head">
+        <div>
+          <div class="page-title">Tracking Surat</div>
+          <div class="page-sub">Lacak alur perjalanan surat menggunakan nomor agenda atau kode barcode.</div>
+        </div>
+        <button class="btn btn-soft" onclick="window.top.location.href=EOF.appUrl('scan')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10"/></svg>
+          Scan Barcode
+        </button>
+      </div>
+
+      <div class="card anim-fade">
+        <div class="flex gap-3" style="flex-wrap:wrap">
+          <div style="flex:1;min-width:240px;position:relative">
+            <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text-soft)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="input" id="inp-code" placeholder="Masukkan kode barcode, mis. SM-20260510-ABC12345" style="padding-left:38px">
+          </div>
+          <button class="btn" id="btn-find">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Lacak
+          </button>
+        </div>
+        <div id="result" class="mt-4"></div>
+      </div>
+    `;
+
+    document.getElementById('btn-find').addEventListener('click', find);
+    document.getElementById('inp-code').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
+
+    async function find() {
+      const code = document.getElementById('inp-code').value.trim();
+      if (!code) { EOF.toast('Kode wajib diisi', 'error'); return; }
+      const res = document.getElementById('result');
+      res.innerHTML = '<div class="loader-wrap"><div class="spinner"></div></div>';
+      try {
+        const r = await EOF.api('track.byBarcode', { barcode: code });
+        const s = r.surat;
+        const timeline = await EOF.api('track.timeline', { suratId: s.id });
+        res.innerHTML = `
+          <div class="card" style="border:1px dashed var(--primary);padding:18px;background:var(--surface-2)">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <div class="fw-700 text-lg">${EOF.escapeHtml(s.perihal)}</div>
+                <div class="text-sm text-muted">${r.type === 'SuratKeluar' ? 'Surat Keluar · ' + EOF.escapeHtml(s.noSurat) : 'Surat Masuk · ' + EOF.escapeHtml(s.noAgenda)}</div>
+              </div>
+              ${EOF.statusBadge(s.status)}
+            </div>
+            <div class="flex gap-2 mb-3">
+              <button class="btn btn-soft btn-sm" onclick="window.top.location.href=EOF.appUrl('detail',{id:'${s.id}',type:'${r.type==='SuratKeluar'?'sk':'sm'}'})">Buka Detail</button>
+            </div>
+            <div class="card" style="background:var(--surface);padding:14px">
+              <div class="card-title mb-3">Riwayat Perjalanan</div>
+              ${timelineHtml(timeline)}
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        res.innerHTML = '<div class="empty">❌ ' + EOF.escapeHtml(e.message) + '</div>';
+      }
+    }
+
+    function timelineHtml(events) {
+      if (!events || !events.length) return '<div class="text-muted text-sm">Belum ada aktivitas.</div>';
+      return '<div class="timeline">' + events.map((e,i) => {
+        const vCls = /selesai|setuju/i.test(e.action) ? 'success' : /tolak|hapus/i.test(e.action) ? 'warning' : '';
+        return '<div class="timeline-item ' + vCls + '" style="animation-delay:'+(i*0.04)+'s">' +
+          '<div class="timeline-dot"></div>' +
+          '<div class="timeline-title">' + EOF.escapeHtml(e.action) + '</div>' +
+          '<div class="timeline-meta">' + EOF.escapeHtml(e.actor||'-') + ' · ' + EOF.fmtDate(e.timestamp, true) + '</div>' +
+          (e.detail ? '<div class="timeline-detail">' + EOF.escapeHtml(e.detail) + '</div>' : '') +
+        '</div>';
+      }).join('') + '</div>';
+    }
+  </script>
+</body>
+</html>
