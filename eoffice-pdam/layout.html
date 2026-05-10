@@ -109,7 +109,7 @@
       const p = el.getAttribute('data-nav');
       el.classList.toggle('active', p === page);
       el.addEventListener('click', function () {
-        window.top.location.href = EOF.appUrl(p);
+        EOF.nav(p);
       });
     });
 
@@ -120,7 +120,7 @@
     const search = document.getElementById('top-search');
     search.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && search.value.trim()) {
-        window.top.location.href = EOF.appUrl('surat-masuk', { q: search.value.trim() });
+        EOF.nav('surat-masuk', { q: search.value.trim() });
       }
     });
 

@@ -46,7 +46,7 @@ const EOF = (function () {
 
   function requireLogin() {
     if (!state.token || !state.user) {
-      window.top.location.href = appUrl('login');
+      nav('login');
       return false;
     }
     return true;
@@ -61,6 +61,29 @@ const EOF = (function () {
     return base + '?' + qs.toString();
   }
 
+  /**
+   * Safe navigation inside Apps Script iframe sandbox.
+   * Apps Script webapps run in a sandboxed iframe, so direct
+   * window.top.location.href throws cross-origin errors.
+   * The reliable method is to programmatically click an <a target="_top">.
+   */
+  function nav(page, extra) {
+    const url = appUrl(page, extra);
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_top';
+      a.rel = 'noopener';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { a.remove(); }, 100);
+    } catch (e) {
+      try { window.top.location.href = url; }
+      catch (_) { window.location.href = url; }
+    }
+  }
+
   // ---------- API (via google.script.run) ----------
   function api(action, payload) {
     const body = Object.assign({ _token: state.token }, payload || {});
@@ -71,7 +94,7 @@ const EOF = (function () {
           if (res.ok) return resolve(res.data);
           if (res.error && res.error.code === 'UNAUTHORIZED') {
             clearAuth();
-            window.top.location.href = appUrl('login');
+            nav('login');
             return reject(new Error(res.error.message));
           }
           reject(new Error((res.error && res.error.message) || 'API error'));
@@ -214,7 +237,7 @@ const EOF = (function () {
   async function logout() {
     try { await api('auth.logout', {}); } catch(_){}
     clearAuth();
-    window.top.location.href = appUrl('login');
+    nav('login');
   }
 
   // Initialize on load
@@ -224,7 +247,7 @@ const EOF = (function () {
     state: state, api: api,
     setAuth: setAuth, clearAuth: clearAuth,
     requireLogin: requireLogin, logout: logout,
-    appUrl: appUrl,
+    appUrl: appUrl, nav: nav,
     toast: toast, modal: modal, confirm: confirm,
     fmtDate: fmtDate, timeAgo: timeAgo, escapeHtml: escapeHtml,
     initials: initials, statusBadge: statusBadge,

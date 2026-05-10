@@ -106,7 +106,7 @@
             ${EOF.statusBadge(s.status)}
           </div>
           <div class="text-sm text-muted mb-3">${r.type === 'SuratKeluar' ? 'Surat Keluar · ' + EOF.escapeHtml(s.noSurat) : 'Surat Masuk · ' + EOF.escapeHtml(s.noAgenda)}</div>
-          <button class="btn w-full mb-3" onclick="window.top.location.href=EOF.appUrl('detail',{id:'${s.id}',type:'${r.type==='SuratKeluar'?'sk':'sm'}'})">Buka Detail</button>
+          <button class="btn w-full mb-3" onclick="EOF.nav('detail',{id:'${s.id}',type:'${r.type==='SuratKeluar'?'sk':'sm'}'})">Buka Detail</button>
           <div class="card-title mt-3 mb-2">Timeline</div>
           ${timelineHtml(timeline)}
         `;

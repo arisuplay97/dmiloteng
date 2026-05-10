@@ -223,7 +223,7 @@
 
     // If already logged in, redirect to dashboard
     if (EOF.state.token && EOF.state.user) {
-      window.top.location.href = EOF.appUrl('dashboard');
+      EOF.nav('dashboard');
     }
 
     const btnEye = document.getElementById('btn-eye');
@@ -250,7 +250,7 @@
         EOF.setAuth(data.token, data.user);
         label.textContent = 'Berhasil, memuat...';
         EOF.toast('Selamat datang ' + data.user.nama + '!');
-        setTimeout(function () { window.top.location.href = EOF.appUrl('dashboard'); }, 400);
+        setTimeout(function () { EOF.nav('dashboard'); }, 400);
       } catch (err) {
         EOF.toast(err.message || 'Login gagal', 'error');
         btn.disabled = false;

@@ -19,7 +19,7 @@
   <script>
     // Admin only
     if ((EOF.state.user||{}).role !== 'Admin') {
-      window.top.location.href = EOF.appUrl('dashboard');
+      EOF.nav('dashboard');
     }
 
     const page = document.getElementById('eof-page');

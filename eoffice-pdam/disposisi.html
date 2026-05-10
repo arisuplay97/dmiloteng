@@ -82,7 +82,7 @@
           )).join('') + '</div>';
 
         el.querySelectorAll('[data-surat]').forEach(c => c.addEventListener('click', () => {
-          window.top.location.href = EOF.appUrl('detail', { id: c.getAttribute('data-surat'), type: 'sm' });
+          EOF.nav('detail', { id: c.getAttribute('data-surat'), type: 'sm' });
         }));
       } catch (e) {
         el.innerHTML = '<div class="empty">Gagal memuat: ' + EOF.escapeHtml(e.message) + '</div>';

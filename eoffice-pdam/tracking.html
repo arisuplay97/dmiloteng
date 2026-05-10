@@ -24,7 +24,7 @@
           <div class="page-title">Tracking Surat</div>
           <div class="page-sub">Lacak alur perjalanan surat menggunakan nomor agenda atau kode barcode.</div>
         </div>
-        <button class="btn btn-soft" onclick="window.top.location.href=EOF.appUrl('scan')">
+        <button class="btn btn-soft" onclick="EOF.nav('scan')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10"/></svg>
           Scan Barcode
         </button>
@@ -67,7 +67,7 @@
               ${EOF.statusBadge(s.status)}
             </div>
             <div class="flex gap-2 mb-3">
-              <button class="btn btn-soft btn-sm" onclick="window.top.location.href=EOF.appUrl('detail',{id:'${s.id}',type:'${r.type==='SuratKeluar'?'sk':'sm'}'})">Buka Detail</button>
+              <button class="btn btn-soft btn-sm" onclick="EOF.nav('detail',{id:'${s.id}',type:'${r.type==='SuratKeluar'?'sk':'sm'}'})">Buka Detail</button>
             </div>
             <div class="card" style="background:var(--surface);padding:14px">
               <div class="card-title mb-3">Riwayat Perjalanan</div>

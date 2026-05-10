@@ -92,7 +92,7 @@
 
         wrap.querySelectorAll('[data-act=detail]').forEach(b => b.addEventListener('click', e => {
           e.stopPropagation();
-          window.top.location.href = EOF.appUrl('detail', { id: b.getAttribute('data-id'), type: 'sk' });
+          EOF.nav('detail', { id: b.getAttribute('data-id'), type: 'sk' });
         }));
         wrap.querySelectorAll('[data-act=approve]').forEach(b => b.addEventListener('click', async e => {
           e.stopPropagation();
@@ -104,7 +104,7 @@
         wrap.querySelectorAll('tr[data-id]').forEach(tr => {
           tr.addEventListener('click', e => {
             if (e.target.closest('button')) return;
-            window.top.location.href = EOF.appUrl('detail', { id: tr.getAttribute('data-id'), type: 'sk' });
+            EOF.nav('detail', { id: tr.getAttribute('data-id'), type: 'sk' });
           });
         });
       } catch (err) { wrap.innerHTML = '<div class="empty">Gagal memuat: ' + EOF.escapeHtml(err.message) + '</div>'; }

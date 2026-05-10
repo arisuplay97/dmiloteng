@@ -25,11 +25,11 @@
           <div class="page-sub">Ringkasan aktivitas persuratan E-Office PDAM.</div>
         </div>
         <div class="flex gap-2">
-          <button class="btn btn-ghost" onclick="window.top.location.href=EOF.appUrl('surat-masuk',{action:'new'})">
+          <button class="btn btn-ghost" onclick="EOF.nav('surat-masuk',{action:'new'})">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Surat Masuk
           </button>
-          <button class="btn" onclick="window.top.location.href=EOF.appUrl('surat-keluar',{action:'new'})">
+          <button class="btn" onclick="EOF.nav('surat-keluar',{action:'new'})">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Surat Keluar
           </button>
@@ -60,7 +60,7 @@
         <div class="card anim-fade">
           <div class="card-header">
             <div class="card-title">Surat Masuk Terbaru</div>
-            <a href="javascript:void(0)" onclick="window.top.location.href=EOF.appUrl('surat-masuk')" class="text-sm">Lihat semua →</a>
+            <a href="javascript:void(0)" onclick="EOF.nav('surat-masuk')" class="text-sm">Lihat semua →</a>
           </div>
           <div id="recent-sm">${loader()}</div>
         </div>
@@ -152,7 +152,7 @@
         const r = await EOF.api('dash.recent', {});
         const smEl = document.getElementById('recent-sm');
         const smHtml = (r.suratMasuk && r.suratMasuk.length) ? r.suratMasuk.map(function (s) {
-          return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="window.top.location.href=EOF.appUrl(\\'detail\\',{id:\\''+s.id+'\\',type:\\'sm\\'})">' +
+          return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="EOF.nav(\\'detail\\',{id:\\''+s.id+'\\',type:\\'sm\\'})">' +
             '<div class="avatar" style="background:var(--gradient-3);width:36px;height:36px">' + EOF.initials(s.pengirim) + '</div>' +
             '<div style="flex:1;min-width:0">' +
               '<div class="fw-600" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + EOF.escapeHtml(s.perihal) + '</div>' +
